@@ -586,18 +586,11 @@ class PHS_Action_Agent_jobs_list extends PHS_Action_Generic_list
                     return false;
                 }
 
-                if (!$agent_obj->run_job($agent_job_arr, ['force_run' => true])) {
-                    if ($agent_obj->has_error()) {
-                        $this->set_error(self::ERR_INSTANCE, $agent_obj->get_simple_error_message());
-
-                        return false;
-                    } else {
-                        $action_result_params['action_result'] = 'failed';
-                    }
-                } else {
+                if( !$agent_obj->run_job( $agent_job_arr, [ 'force_run' => true ] ) )
+                    $action_result_params['action_result'] = 'failed';
+                else
                     $action_result_params['action_result'] = 'success';
-                }
-                break;
+            break;
 
             case 'do_delete':
                 if( !empty( $action['action_result'] ) )

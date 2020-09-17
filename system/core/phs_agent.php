@@ -390,7 +390,7 @@ class PHS_Agent extends PHS_Registry
         else
             $extra['force_run'] = true;
 
-        if( !$agent_jobs_model->job_is_active( $job_arr ) && !$extra['force_run'] )
+        if( !$agent_jobs_model->job_is_active( $job_arr ) )
         {
             $this->set_error( self::ERR_RUN_JOB, self::_t( 'Agent job not active.' ) );
             return false;
