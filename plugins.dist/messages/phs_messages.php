@@ -421,11 +421,12 @@ class PHS_Plugin_Messages extends PHS_Plugin
      */
     public function trigger_account_action( $hook_args = false )
     {
+        $action_alias_arr = ['after_delete', 'edit'];
         $hook_args = self::validate_array( $hook_args, PHS_Hooks::default_account_action_hook_args() );
 
-        if( empty( $hook_args['account_data'] ) or !is_array( $hook_args['account_data'] )
-         or empty( $hook_args['account_data']['id'] )
-         or $hook_args['action_alias'] !== 'after_delete' )
+        if (empty($hook_args['account_data']) || !is_array($hook_args['account_data'])
+            || empty($hook_args['account_data']['id'])
+            || !in_array($hook_args['action_alias'], $action_alias_arr))
             return false;
 
         $account_arr = $hook_args['account_data'];
