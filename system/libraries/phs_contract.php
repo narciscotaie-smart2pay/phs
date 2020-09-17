@@ -4,17 +4,17 @@ namespace phs\libraries;
 abstract class PHS_Contract extends PHS_Instantiable
 {
     const FROM_OUTSIDE = 1, FROM_INSIDE = 2, FROM_BOTH = 3;
-    protected static $KEYS_ARR = array(
-        self::FROM_OUTSIDE => array( 'title' => 'From Outside' ),
-        self::FROM_INSIDE => array( 'title' => 'From Inside' ),
-        self::FROM_BOTH => array( 'title' => 'From Both' ),
-    );
+    protected static $KEYS_ARR = [
+        self::FROM_OUTSIDE => [ 'title' => 'From Outside' ],
+        self::FROM_INSIDE => [ 'title' => 'From Inside' ],
+        self::FROM_BOTH => [ 'title' => 'From Both' ],
+    ];
 
     /** @var array Array of data that was parsed */
-    private $_source_data = array();
+    private $_source_data = [];
 
     /** @var array After parsing data this is the resulting array */
-    private $_resulting_data = array();
+    private $_resulting_data = [];
 
     /** @var bool|int Tells if $_source_data is considered input or output */
     private $_data_type = false;
@@ -23,7 +23,7 @@ abstract class PHS_Contract extends PHS_Instantiable
     private $_data_was_parsed = false;
 
     /** @var array Normalized nodes definition */
-    private $_definition_arr = array();
+    private $_definition_arr = [];
 
     /** @var bool Was defintion normalized already? */
     private $_definition_initialized = false;
@@ -45,18 +45,19 @@ abstract class PHS_Contract extends PHS_Instantiable
 
     private function _reset_data()
     {
-        $this->_source_data = array();
-        $this->_resulting_data = array();
+        $this->_source_data = [];
+        $this->_resulting_data = [];
         $this->_data_type = false;
         $this->_data_was_parsed = false;
     }
 
     /**
      * @param array $outside_data Source array received from outside which should be converted into inside data
+     * @param array|bool $params Functionality parameters
      *
      * @return array|bool
      */
-    public function parse_data_from_outside_source( $outside_data )
+    public function parse_data_from_outside_source( $outside_data, $params = false )
     {
         $this->reset_error();
         $this->_reset_data();
@@ -64,18 +65,26 @@ abstract class PHS_Contract extends PHS_Instantiable
         if( !$this->_make_sure_we_have_definition() )
             return false;
 
-        if( empty( $outside_data ) or !is_array( $outside_data ) )
-            $outside_data = array();
+        if( empty( $outside_data ) || !is_array( $outside_data ) )
+            $outside_data = [];
+        if( empty( $params ) || !is_array( $params ) )
+            $params = [];
+
+        if( empty( $params['force_import_if_not_found'] ) )
+            $params['force_import_if_not_found'] = false;
+        else
+            $params['force_import_if_not_found'] = true;
 
         $this->_data_type = self::FROM_OUTSIDE;
         $this->_source_data = $outside_data;
 
-        $parsing_params = array();
+        $parsing_params = [];
         $parsing_params['lvl'] = 0;
+        $parsing_params['force_import_if_not_found'] = $params['force_import_if_not_found'];
 
         if( null === ($this->_resulting_data = $this->_parse_data_from_outside_source( $this->_definition_arr, $outside_data, $parsing_params )) )
         {
-            $this->_resulting_data = array();
+            $this->_resulting_data = [];
 
             if( !$this->has_error() )
                 $this->set_error( self::ERR_PARAMETERS, self::_t( 'Error while parsing data from outside source.' ) );
@@ -97,32 +106,34 @@ abstract class PHS_Contract extends PHS_Instantiable
      */
     private function _parse_data_from_outside_source( $definition_arr, $outside_data, $params )
     {
-        if( empty( $definition_arr ) or !is_array( $definition_arr )
-         or empty( $outside_data ) or !is_array( $outside_data ) )
+        if( empty( $definition_arr ) || !is_array( $definition_arr )
+         || empty( $outside_data ) || !is_array( $outside_data ) )
         {
             if( 0 === $params['lvl'] )
-                return array();
+                return [];
 
             return false;
         }
 
-        $return_arr = array();
+        $return_arr = [];
         foreach( $definition_arr as $node_key => $node_arr )
         {
             if( $node_arr['key_type'] === self::FROM_INSIDE )
                 continue;
 
+            // Make sure that we have a data to process
+           if( !array_key_exists( $node_arr['outside_key'], $outside_data ) )
+            {
+                if( !empty( $node_arr['import_if_not_found'] )
+                 || !empty( $params['force_import_if_not_found'] ) )
+                    $return_arr[$node_arr['inside_key']] = $node_arr['default_inside'];
+
+                continue;
+            }
+
             // Check if we have recurring node...
             if( !empty( $node_arr['recurring_node'] ) )
             {
-                if( !array_key_exists( $node_arr['outside_key'], $outside_data ) )
-                {
-                    if( !empty( $node_arr['import_if_not_found'] ) )
-                        $return_arr[$node_arr['inside_key']] = $node_arr['default_inside'];
-
-                    continue;
-                }
-
                 $return_arr[$node_arr['inside_key']] = [];
 
                 if( !is_array( $outside_data[$node_arr['outside_key']] ) )
@@ -145,19 +156,35 @@ abstract class PHS_Contract extends PHS_Instantiable
                     $return_arr[$node_arr['inside_key']][$inside_knti] = $result_item;
 
                     if( !empty( $node_arr['recurring_max_items'] )
-                    and $recurring_items_no >= $node_arr['recurring_max_items'] )
+                     && $recurring_items_no >= $node_arr['recurring_max_items'] )
                         break;
                 }
 
                 continue;
             }
 
-            if( array_key_exists( $node_arr['outside_key'], $outside_data ) )
-                $return_arr[$node_arr['inside_key']] = PHS_params::set_type( $outside_data[$node_arr['outside_key']], $node_arr['type'],
-                    (!empty( $node_arr['type_extra'] )?$node_arr['type_extra']:false) );
+            // This is not a recurring node, but it is an "object" (has nodes definition inside)
+            if( !empty( $node_arr['nodes'] ) && is_array( $node_arr['nodes'] ) )
+            {
+                if( !is_array( $outside_data[$node_arr['outside_key']] ) )
+                    continue;
 
-            elseif( !empty( $node_arr['import_if_not_found'] ) )
-                $return_arr[$node_arr['inside_key']] = $node_arr['default_inside'];
+                $return_arr[$node_arr['inside_key']] = [];
+
+                $rec_params = $params;
+                $rec_params['lvl']++;
+
+                if( false === ($result_item = $this->_parse_data_from_inside_source( $node_arr['nodes'], $outside_data[$node_arr['outside_key']], $rec_params )) )
+                    continue;
+
+                $return_arr[$node_arr['inside_key']] = $result_item;
+
+                continue;
+            }
+
+            // Scalar value...
+            $return_arr[$node_arr['inside_key']] = PHS_params::set_type( $outside_data[$node_arr['outside_key']], $node_arr['type'],
+                    (!empty( $node_arr['type_extra'] )?$node_arr['type_extra']:false) );
         }
 
         return $return_arr;
@@ -165,10 +192,11 @@ abstract class PHS_Contract extends PHS_Instantiable
 
     /**
      * @param array $inside_data Source array received from inside which should be converted into outside data
+     * @param array|bool $params Functionality parameters
      *
      * @return array|bool
      */
-    public function parse_data_from_inside_source( $inside_data )
+    public function parse_data_from_inside_source( $inside_data, $params = false )
     {
         $this->reset_error();
         $this->_reset_data();
@@ -176,18 +204,26 @@ abstract class PHS_Contract extends PHS_Instantiable
         if( !$this->_make_sure_we_have_definition() )
             return false;
 
-        if( empty( $inside_data ) or !is_array( $inside_data ) )
-            $inside_data = array();
+        if( empty( $inside_data ) || !is_array( $inside_data ) )
+            $inside_data = [];
+        if( empty( $params ) || !is_array( $params ) )
+            $params = [];
+
+        if( empty( $params['force_export_if_not_found'] ) )
+            $params['force_export_if_not_found'] = false;
+        else
+            $params['force_export_if_not_found'] = true;
 
         $this->_data_type = self::FROM_INSIDE;
         $this->_source_data = $inside_data;
 
-        $parsing_params = array();
+        $parsing_params = [];
         $parsing_params['lvl'] = 0;
+        $parsing_params['force_export_if_not_found'] = $params['force_export_if_not_found'];
 
         if( null === ($this->_resulting_data = $this->_parse_data_from_inside_source( $this->_definition_arr, $inside_data, $parsing_params )) )
         {
-            $this->_resulting_data = array();
+            $this->_resulting_data = [];
 
             if( !$this->has_error() )
                 $this->set_error( self::ERR_PARAMETERS, self::_t( 'Error while parsing data from inside source.' ) );
@@ -209,32 +245,34 @@ abstract class PHS_Contract extends PHS_Instantiable
      */
     private function _parse_data_from_inside_source( $definition_arr, $inside_data, $params )
     {
-        if( empty( $definition_arr ) or !is_array( $definition_arr )
-         or empty( $inside_data ) or !is_array( $inside_data ) )
+        if( empty( $definition_arr ) || !is_array( $definition_arr )
+         || empty( $inside_data ) || !is_array( $inside_data ) )
         {
             if( 0 === $params['lvl'] )
-                return array();
+                return [];
 
             return false;
         }
 
-        $return_arr = array();
+        $return_arr = [];
         foreach( $definition_arr as $node_key => $node_arr )
         {
             if( $node_arr['key_type'] === self::FROM_OUTSIDE )
                 continue;
 
+            // Make sure that we have a data to process
+            if( !array_key_exists( $node_arr['inside_key'], $inside_data ) )
+            {
+                if( !empty( $node_arr['export_if_not_found'] )
+                 || !empty( $params['force_export_if_not_found'] ) )
+                    $return_arr[$node_arr['outside_key']] = $node_arr['default_outside'];
+
+                continue;
+            }
+
             // Check if we have recurring node...
             if( !empty( $node_arr['recurring_node'] ) )
             {
-                if( !array_key_exists( $node_arr['inside_key'], $inside_data ) )
-                {
-                    if( !empty( $node_arr['export_if_not_found'] ) )
-                        $return_arr[$node_arr['outside_key']] = $node_arr['default_outside'];
-
-                    continue;
-                }
-
                 $return_arr[$node_arr['outside_key']] = [];
 
                 if( !is_array( $inside_data[$node_arr['inside_key']] ) )
@@ -257,34 +295,59 @@ abstract class PHS_Contract extends PHS_Instantiable
                     $return_arr[$node_arr['outside_key']][$inside_knti] = $result_item;
 
                     if( !empty( $node_arr['recurring_max_items'] )
-                    and $recurring_items_no >= $node_arr['recurring_max_items'] )
+                     && $recurring_items_no >= $node_arr['recurring_max_items'] )
                         break;
                 }
 
                 continue;
             }
 
-            if( array_key_exists( $node_arr['inside_key'], $inside_data ) )
-                $return_arr[$node_arr['outside_key']] = PHS_params::set_type( $inside_data[$node_arr['inside_key']], $node_arr['type'],
-                    (!empty( $node_arr['type_extra'] )?$node_arr['type_extra']:false) );
+            // This is not a recurring node, but it is an "object" (has nodes definition inside)
+            if( !empty( $node_arr['nodes'] ) && is_array( $node_arr['nodes'] ) )
+            {
+                if( !is_array( $inside_data[$node_arr['inside_key']] ) )
+                    continue;
 
-            elseif( !empty( $node_arr['export_if_not_found'] ) )
-                $return_arr[$node_arr['outside_key']] = $node_arr['default_outside'];
+                $return_arr[$node_arr['outside_key']] = [];
+
+                $rec_params = $params;
+                $rec_params['lvl']++;
+
+                if( false === ($result_item = $this->_parse_data_from_inside_source( $node_arr['nodes'], $inside_data[$node_arr['inside_key']], $rec_params )) )
+                    continue;
+
+                $return_arr[$node_arr['outside_key']] = $result_item;
+
+                continue;
+            }
+
+            // Scalar value...
+            $return_arr[$node_arr['outside_key']] = PHS_params::set_type( $inside_data[$node_arr['inside_key']], $node_arr['type'],
+                    (!empty( $node_arr['type_extra'] )?$node_arr['type_extra']:false) );
         }
 
         return $return_arr;
     }
 
+    /**
+     * @return bool
+     */
     public function data_is_from_outside()
     {
         return ($this->_data_type === self::FROM_OUTSIDE);
     }
 
+    /**
+     * @return bool
+     */
     public function data_is_from_inside()
     {
         return ($this->_data_type === self::FROM_INSIDE);
     }
 
+    /**
+     * @return bool
+     */
     public function data_was_parsed()
     {
         return $this->_data_was_parsed;
@@ -305,7 +368,7 @@ abstract class PHS_Contract extends PHS_Instantiable
      */
     protected static function _get_contract_node_definition()
     {
-        return array(
+        return [
             // Exporting internal data to outside data (input -> output) $internal_source[$node['inside_key']] -> $export[$node['outside_key']]
             // Importing outside data to internal data (output -> input) $outside_source[$node['outside_key']] -> $import[$node['inside_key']]
 
@@ -351,7 +414,7 @@ abstract class PHS_Contract extends PHS_Instantiable
 
             // If this node has children (subnodes), add their definition here...
             'nodes' => false,
-        );
+        ];
     }
 
     protected function _make_sure_we_have_definition()
@@ -394,17 +457,17 @@ abstract class PHS_Contract extends PHS_Instantiable
         }
 
         $node_definition = self::_get_contract_node_definition();
-        $return_arr = array();
+        $return_arr = [];
         foreach( $definition_arr as $int_key => $node_arr )
         {
             if( !isset( $node_arr['inside_key'] )
-             or (string)$node_arr['inside_key'] === ''
-             or !is_scalar( $node_arr['inside_key'] ) )
+             || (string)$node_arr['inside_key'] === ''
+             || !is_scalar( $node_arr['inside_key'] ) )
                 $node_arr['inside_key'] = $int_key;
 
             if( !isset( $node_arr['outside_key'] )
-             or (string)$node_arr['outside_key'] === ''
-             or !is_scalar( $node_arr['outside_key'] ) )
+             || (string)$node_arr['outside_key'] === ''
+             || !is_scalar( $node_arr['outside_key'] ) )
                 $node_arr['outside_key'] = $int_key;
 
             if( array_key_exists( 'default', $node_arr ) )
@@ -414,13 +477,13 @@ abstract class PHS_Contract extends PHS_Instantiable
             }
 
             if( !isset( $node_arr['key_type'] )
-             or !$this->valid_data_key( $node_arr['key_type'] ) )
+             || !$this->valid_data_key( $node_arr['key_type'] ) )
                 $node_arr['key_type'] = self::FROM_BOTH;
 
             $node_arr = self::validate_array( $node_arr, $node_definition );
 
             if( !empty( $node_arr['recurring_node'] )
-            and (empty( $node_arr['nodes'] ) or !is_array( $node_arr['nodes'] )) )
+             && (empty( $node_arr['nodes'] ) || !is_array( $node_arr['nodes'] )) )
             {
                 $this->set_error( self::ERR_PARAMETERS, self::_t( 'Node %s in contract definition is set as recurring, '.
                                                                   'but has no nodes defined as array.', $int_key ) );
@@ -444,13 +507,13 @@ abstract class PHS_Contract extends PHS_Instantiable
      */
     public function get_data_keys( $lang = false )
     {
-        static $keys_arr = array();
+        static $keys_arr = [];
 
         if( $lang === false
-        and !empty( $keys_arr ) )
+         && !empty( $keys_arr ) )
             return $keys_arr;
 
-        $result_arr = $this->translate_array_keys( self::$KEYS_ARR, array( 'title' ), $lang );
+        $result_arr = $this->translate_array_keys( self::$KEYS_ARR, [ 'title' ], $lang );
 
         if( $lang === false )
             $keys_arr = $result_arr;
@@ -468,10 +531,10 @@ abstract class PHS_Contract extends PHS_Instantiable
         static $data_keys_key_val_arr = false;
 
         if( $lang === false
-        and $data_keys_key_val_arr !== false )
+         && $data_keys_key_val_arr !== false )
             return $data_keys_key_val_arr;
 
-        $key_val_arr = array();
+        $key_val_arr = [];
         if( ($data_keys = $this->get_data_keys( $lang )) )
         {
             foreach( $data_keys as $key => $val )
@@ -499,7 +562,7 @@ abstract class PHS_Contract extends PHS_Instantiable
     {
         $all_data_keys = $this->get_data_keys( $lang );
         if( empty( $data_key )
-         or !isset( $all_data_keys[$data_key] ) )
+         || !isset( $all_data_keys[$data_key] ) )
             return false;
 
         return $all_data_keys[$data_key];
