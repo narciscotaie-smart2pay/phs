@@ -2231,68 +2231,6 @@ class PHS_Ftp extends PHS_Library
         return true;
     }
 
-    public function rename($old_dir, $new_dir)
-    {
-        $ftp_settings = $this->settings();
-
-        if (!is_string($old_dir) || !is_string($new_dir)) {
-            return false;
-        }
-
-        $return_val = true;
-
-        switch ($ftp_settings['connection_mode']) {
-            case self::CON_TYPE_SSH:
-                if (!$this->is_connected() && !$this->connect()) {
-                    if (!$this->has_error()) {
-                        $this->set_error(self::ERR_CONNECTION, 'FTP not connected and cannot (re)connect to server.');
-                    }
-
-                    $return_val = false;
-                } else {
-                    /// region prepare absolute path
-                    if (substr($old_dir, 0, 1) !== '/'
-                        && ($win_drive = substr($old_dir, 1, 2)) !== ':/' && $win_drive !== ':\\'
-                    ) {
-                        $old_dir        = trim($old_dir, '/\\');
-                        $old_remote_dir = rtrim($this->internal_settings['remote_dir'], '/\\') .
-                            ($old_dir !== '' ? '/' . $old_dir : '');
-                    } else {
-                        $old_remote_dir = $old_dir;
-                    }
-
-                    if (substr($new_dir, 0, 1) !== '/'
-                        && ($win_drive = substr($new_dir, 1, 2)) !== ':/' && $win_drive !== ':\\'
-                    ) {
-                        $new_dir        = trim($new_dir, '/\\');
-                        $new_remote_dir = rtrim($this->internal_settings['remote_dir'], '/\\') .
-                            ($new_dir !== '' ? '/' . $new_dir : '');
-                    } else {
-                        $new_remote_dir = $new_dir;
-                    }
-                    /// endregion
-
-                    if (!ssh2_sftp_rename($this->internal_settings['con'], $old_remote_dir, $new_remote_dir)) {
-                        $this->set_error(self::ERR_REMOTE_LOCATION, 'FTP cannot change remote directory.');
-
-                        $return_val = false;
-                    }
-                }
-                break;
-
-            case self::CON_TYPE_NORMAL:
-            case self::CON_TYPE_NORMAL_SSL:
-            case self::CON_TYPE_CURL:
-            case self::CON_TYPE_CURL_SSL:
-            default:
-                $this->set_error(self::ERR_FUNCTIONALITY, 'FTP rename not implemented for you connection type.');
-                $return_val = false;
-                break;
-        }
-
-        return $return_val;
-    }
-
     /**
      * @param string $old_dir
      * @param string $new_dir
