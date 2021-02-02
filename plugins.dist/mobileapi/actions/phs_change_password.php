@@ -4,7 +4,7 @@ namespace phs\plugins\mobileapi\actions;
 
 use \phs\PHS;
 use \phs\PHS_Scope;
-use \phs\PHS_api;
+use \phs\PHS_Api;
 use \phs\libraries\PHS_Action;
 
 class PHS_Action_Change_password extends PHS_Action
@@ -12,18 +12,18 @@ class PHS_Action_Change_password extends PHS_Action
     /** @inheritdoc */
     public function action_roles()
     {
-        return array( self::ACT_ROLE_CHANGE_PASSWORD );
+        return [ self::ACT_ROLE_CHANGE_PASSWORD ];
     }
 
     public function allowed_scopes()
     {
-        return array( PHS_Scope::SCOPE_API );
+        return [ PHS_Scope::SCOPE_API ];
     }
 
     public function execute()
     {
-        /** @var \phs\PHS_api $api_obj */
-        if( !($api_obj = PHS_api::global_api_instance()) )
+        /** @var \phs\PHS_Api $api_obj */
+        if( !($api_obj = PHS_Api::global_api_instance()) )
         {
             $this->set_error( self::ERR_FUNCTIONALITY, $this->_pt( 'Error obtaining API instance.' ) );
             return false;
@@ -58,7 +58,7 @@ class PHS_Action_Change_password extends PHS_Action
             exit;
         }
 
-        if( !($request_arr = PHS_api::get_request_body_as_json_array())
+        if( !($request_arr = PHS_Api::get_request_body_as_json_array())
          or empty( $request_arr['pass'] )
          or empty( $request_arr['new_pass'] ) )
         {
